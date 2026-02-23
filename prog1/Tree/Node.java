@@ -48,7 +48,7 @@ public class Node {
         return false;
     }
 
-    public boolean isNull() {
+    public boolean isNil() {
         return false;
     }
 

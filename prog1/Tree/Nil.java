@@ -16,6 +16,9 @@ public class Nil extends Node {
         print(n, false);
     }
 
+    @Override
+    public boolean isNil() { return true; }
+
     public void print(int n, boolean p) {
         for (int i = 0; i < n; i++)
             System.out.print(" ");

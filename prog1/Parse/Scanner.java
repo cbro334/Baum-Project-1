@@ -1,108 +1,111 @@
-// Scanner -- The lexical analyzer for the Scheme printer and interpreter.
-
 package Parse;
 
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.PushbackInputStream;
-
-import Tokens.Token;
-import Tokens.TokenType;
-import Tokens.IdentToken;
-import Tokens.IntToken;
-import Tokens.StrToken;
+import Tokens.*;
 
 public class Scanner {
-	private PushbackInputStream in;
+    private PushbackInputStream in;
+    private Token lookaheadToken = null;
+    private int BUFSIZE = 1000;
+    private byte[] buf = new byte[BUFSIZE];
 
-	// Maximum length of strings and identifers
-	private int BUFSIZE = 1000;
-	private byte[] buf = new byte[BUFSIZE];
+    public Scanner(InputStream i) {
+        in = new PushbackInputStream(i);
+    }
 
-	public Scanner(InputStream i) {
-		in = new PushbackInputStream(i);
-	}
+    // Method to allow the parser to put back a token for LL(0) parsing
+    public void pushBackToken(Token t) {
+        lookaheadToken = t;
+    }
 
-	public Token getNextToken() {
-		int ch;
+    public Token getNextToken() {
+        if (lookaheadToken != null) {
+            Token t = lookaheadToken;
+            lookaheadToken = null;
+            return t;
+        }
 
-		try {
-			// It would be more efficient if we'd maintain our own
-			// input buffer and read characters out of that
-			// buffer, but reading individual characters from the
-			// input stream is easier.
-			ch = in.read();
+        int ch;
+        try {
+            ch = in.read();
 
-			// TODO: Skip white space and comments
+            // 1. Skip white space and 2. Discard comments [cite: 46, 47]
+            while (Character.isWhitespace(ch) || ch == ';') {
+                if (ch == ';') {
+                    while (ch != -1 && ch != '\n' && ch != '\r')
+                        ch = in.read();
+                } else {
+                    ch = in.read();
+                }
+            }
 
-			// Return null on EOF
-			if (ch == -1)
-				return null;
+            if (ch == -1) return null; // Return null on EOF [cite: 13]
 
-			// Special characters
-			else if (ch == '\'')
-				return new Token(TokenType.QUOTE);
-			else if (ch == '(')
-				return new Token(TokenType.LPAREN);
-			else if (ch == ')')
-				return new Token(TokenType.RPAREN);
-			else if (ch == '.')
-				// We ignore the special identifier `...'.
-				return new Token(TokenType.DOT);
+            // 3. Recognize special characters [cite: 48]
+            if (ch == '\'') return new Token(TokenType.QUOTE);
+            if (ch == '(')  return new Token(TokenType.LPAREN);
+            if (ch == ')')  return new Token(TokenType.RPAREN);
+            if (ch == '.')  return new Token(TokenType.DOT);
 
-			// Boolean constants
-			else if (ch == '#') {
-				ch = in.read();
+            // 4. Recognize boolean constants #t and #f [cite: 49]
+            if (ch == '#') {
+                ch = in.read();
+                if (ch == 't') return new Token(TokenType.TRUE);
+                if (ch == 'f') return new Token(TokenType.FALSE);
+                System.err.println("Illegal character '" + (char)ch + "' following #");
+                return getNextToken();
+            }
 
-				if (ch == 't')
-					return new Token(TokenType.TRUE);
-				else if (ch == 'f')
-					return new Token(TokenType.FALSE);
-				else if (ch == -1) {
-					System.err.println("Unexpected EOF following #");
-					return null;
-				} else {
-					System.err.println("Illegal character '" +
-							(char)ch + "' following #");
-					return getNextToken();
-				}
-			}
+            // 6. Recognize string constants [cite: 51]
+            if (ch == '"') {
+                int i = 0;
+                while ((ch = in.read()) != '"' && ch != -1) {
+                    if (i < BUFSIZE) buf[i++] = (byte)ch;
+                }
+                return new StrToken(new String(buf, 0, i));
+            }
 
-			// String constants
-			else if (ch == '"') {
-				// TODO: Scan a string into the buffer variable buf
-				return new StrToken(buf.toString());
-			}
+            // 5. Recognize integer constants (unsigned digits) [cite: 50]
+            if (ch >= '0' && ch <= '9') {
+                int val = 0;
+                while (ch >= '0' && ch <= '9') {
+                    val = val * 10 + (ch - '0');
+                    ch = in.read();
+                }
+                in.unread(ch);
+                return new IntToken(val);
+            }
 
-			// Integer constants
-			else if (ch >= '0' && ch <= '9') {
-				int i = ch - '0';
-				// TODO: scan the number and convert it to an integer
+            // 7. Recognize identifiers (converted to lowercase) [cite: 52, 57]
+            if (isInitial(ch) || ch == '+' || ch == '-') {
+                int i = 0;
+                // Handle peculiar identifiers + and - which are only identifiers if alone 
+                // or followed by subsequent chars, but not if part of a signed number 
+                // (though project spec ignores signed numbers).
+                while (isSubsequent(ch)) {
+                    if (i < BUFSIZE) buf[i++] = (byte)Character.toLowerCase(ch);
+                    ch = in.read();
+                }
+                in.unread(ch);
+                return new IdentToken(new String(buf, 0, i));
+            }
 
-				// Put the character after the integer back into the input
-				// in.unread(ch);
-				return new IntToken(i);
-			}
+            // Illegal character error handling [cite: 13]
+            System.err.println("Illegal input character '" + (char)ch + '\'');
+            return getNextToken();
+        } catch (IOException e) {
+            return null;
+        }
+    }
 
-			// Identifiers
-			else if (ch >= 'A' && ch <= 'Z'
-				/* or ch is some other valid first character for an identifier */) {
-				// TODO: scan an identifier into the buffer variable buf
+    private boolean isInitial(int ch) {
+        return (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || 
+               "!$%&*/:<=>?^_~".indexOf(ch) != -1;
+    }
 
-				// Put the character after the identifier back into the input
-				// in.unread(ch);
-
-				return new IdentToken(buf.toString());
-			}
-
-			// Illegal character
-			else {
-				System.err.println("Illegal input character '" + (char)ch + '\'');
-				return getNextToken();
-			}
-		} catch (IOException e) {
-			System.err.println("IOException: " + e.getMessage());
-			return null;
-		}
-	}
+    private boolean isSubsequent(int ch) {
+        return isInitial(ch) || (ch >= '0' && ch <= '9') || "+-.@".indexOf(ch) != -1;
+    }
 }

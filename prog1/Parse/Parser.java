@@ -35,7 +35,8 @@
 
 package Parse;
 
-import Tree.Node;
+import Tokens.*;
+import Tree.*;
 
 public class Parser {
     private Scanner scanner;
@@ -45,14 +46,58 @@ public class Parser {
     }
 
     public Node parseExp() {
-        // TODO: write code for parsing an exp
-        return null;
+        Token t = scanner.getNextToken();
+        if (t == null) return null;
+
+        TokenType type = t.getType();
+
+        // exp -> ( rest
+        if (type == TokenType.LPAREN) {
+            return parseRest();
+        }
+        // exp -> #f | #t (Singletons) [cite: 169]
+        if (type == TokenType.FALSE) return BooleanLit.getInstance(false);
+        if (type == TokenType.TRUE)  return BooleanLit.getInstance(true);
+        
+        // exp -> ' exp
+        if (type == TokenType.QUOTE) {
+            return new Cons(new Ident("quote"), new Cons(parseExp(), Nil.getInstance()));
+        }
+        // exp -> integer_constant | string_constant | identifier [cite: 129, 134-136]
+        if (type == TokenType.INT)    return new IntLit(t.getIntVal());
+        if (type == TokenType.STRING) return new StringLit(t.getStrVal());
+        if (type == TokenType.IDENT)  return new Ident(t.getName());
+
+        // Parse Error: discard and continue [cite: 13]
+        System.err.println("Parse error: unexpected token " + type);
+        return parseExp();
     }
 
     protected Node parseRest() {
-        // TODO: write code for parsing rest
-        return null;
-    }
+        Token t = scanner.getNextToken();
+        if (t == null) return null;
 
-    // TODO: Add any additional methods you might need.
+        // rest -> ) [cite: 132]
+        if (t.getType() == TokenType.RPAREN) {
+            return Nil.getInstance(); // Singleton [cite: 169]
+        }
+
+        // rest -> exp+ [. exp] ) 
+        // Check for dotted pair notation
+        if (t.getType() == TokenType.DOT) {
+            Node car = parseExp();
+            Token closing = scanner.getNextToken();
+            if (closing.getType() != TokenType.RPAREN) {
+                System.err.println("Parse error: expected ')' after dotted pair");
+            }
+            return car;
+        }
+
+        // If not ) or ., it must be the start of an expression. 
+        // Put it back so parseExp() can read it[cite: 13].
+        scanner.pushBackToken(t);
+        Node car = parseExp();
+        Node cdr = parseRest();
+        return new Cons(car, cdr);
+    }
 }

@@ -1,8 +1,6 @@
-// Cons -- Parse tree node class for representing a Cons node
-
 package Tree;
 
-import Special.Special;
+import Special.*;
 
 public class Cons extends Node {
     private Node car;
@@ -15,19 +13,30 @@ public class Cons extends Node {
         parseList();
     }
 
-    // parseList() `parses' special forms, constructs an appropriate
-    // object of a subclass of Special, and stores a pointer to that
-    // object in variable form. It would be possible to fully parse
-    // special forms at this point. Since this causes complications
-    // when using (incorrect) programs as data, it is easiest to let
-    // parseList only look at the car for selecting the appropriate
-    // object from the Special hierarchy and to leave the rest of
-    // parsing up to the interpreter.
-    void parseList() {
-    }
+    // Accessors for Special classes to navigate the list
+    @Override
+    public Node getCar() { return car; }
 
-    // TODO: Add any helper functions for parseList
-    // to the class hierarchy as needed.
+    @Override
+    public Node getCdr() { return cdr; }
+
+    // Logic to select the printing strategy based on the keyword [cite: 190, 197]
+    void parseList() {
+        if (car instanceof Ident) {
+            String name = ((Ident) car).getName();
+            if (name.equals("quote"))       form = new Quote();
+            else if (name.equals("lambda"))  form = new Lambda();
+            else if (name.equals("begin"))   form = new Begin();
+            else if (name.equals("if"))      form = new If();
+            else if (name.equals("let"))     form = new Let();
+            else if (name.equals("cond"))    form = new Cond();
+            else if (name.equals("define"))  form = new Define();
+            else if (name.equals("set!"))    form = new Set();
+            else                             form = new Regular();
+        } else {
+            form = new Regular();
+        }
+    }
 
     public void print(int n) {
         form.print(this, n, false);
